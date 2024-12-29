@@ -154,7 +154,7 @@ private:
 
 struct arranged_block_iterable_proxy {
     arranged_block_iterable_proxy(std::vector<arranged_block> &blocks, arranged_block_index current_index):
-        blocks_(blocks),
+        blocks_(&blocks),
         current_index_(current_index) {
 
     }
@@ -194,10 +194,10 @@ struct arranged_block_iterable_proxy {
         int successor_index_;
     };
 
-    iterator begin() { return {blocks_, current_index_, 0}; }
-    iterator   end() { return {blocks_, current_index_, static_cast<int>(unproxy().size() - 1)}; }
+    iterator begin() { return {*blocks_, current_index_, 0}; }
+    iterator   end() { return {*blocks_, current_index_, static_cast<int>(unproxy().size() - 1)}; }
 
-    arranged_block &unproxy() { return blocks_[current_index_]; }
+    arranged_block &unproxy() { return (*blocks_)[current_index_]; }
 
     decltype(auto) hash() { return unproxy().hash();  }
     decltype(auto) data() { return unproxy().data(); }
@@ -207,7 +207,7 @@ struct arranged_block_iterable_proxy {
 
 private:
     arranged_block_index current_index_;
-    std::vector<arranged_block> &blocks_;
+    std::vector<arranged_block> *blocks_;
 };
 
 
@@ -324,6 +324,8 @@ private:
         arranged_block_index index = arranged_blocks_.size() - 1;
 
         parent.add_successor(index);
+        LOG("LINK: {} to {}", parent.hash(), parent.successors().size(), arranged_blocks_[index].hash());
+
         block_registry_[arranged_blocks_.back().hash()] = index;
 
         // Mark blocks this block replaced
