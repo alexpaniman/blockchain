@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <ifaddrs.h>
+#include <memory>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -120,6 +121,16 @@ bool is_mine_address(const sockaddr_in& addr) {
 } // end anonymous namespace
 
 
+
+struct network_impl {
+    uint16_t port;
+
+    int broadcast_sock;
+    int receiving_sock;
+    int peer2peer_sock;
+};
+
+
 std::string address::to_string() {
     sockaddr_in current_sockaddr = {};
     std::memcpy(&current_sockaddr, this, sizeof(sockaddr));
@@ -132,14 +143,16 @@ std::string address::to_string() {
 
 
 network::network(uint16_t port):
-    port_(port),
-    receiving_sock_(create_receiving_socket(port)),
-    broadcast_sock_(create_broadcast_socket()),
-    peer2peer_sock_(create_peer2peer_socket()){
+    pimpl_(std::make_shared<network_impl>(network_impl {
+        .port = port,
+        .broadcast_sock = create_broadcast_socket(),
+        .receiving_sock = create_receiving_socket(port),
+        .peer2peer_sock = create_peer2peer_socket()
+    })) {
 }
 
 bool network::send(buffer message, address target_addr) {
-    ssize_t sent_length = sendto(peer2peer_sock_, message.data, message.size, 0,
+    ssize_t sent_length = sendto(pimpl_->peer2peer_sock, message.data, message.size, 0,
                                  (struct sockaddr *) &target_addr, sizeof(target_addr));
     if (sent_length < 0) {
         perror("Error sending message");
@@ -152,11 +165,11 @@ bool network::send(buffer message, address target_addr) {
 bool network::broadcast(buffer message) {
     sockaddr_in broadcasting_address =  {
         .sin_family = AF_INET,
-        .sin_port = htons(port_),
+        .sin_port = htons(pimpl_->port),
         .sin_addr = { .s_addr = inet_addr(BROADCAST_IP) }
     };
 
-    if (sendto(broadcast_sock_, message.data, message.size, 0, (struct sockaddr *) &broadcasting_address, sizeof(broadcasting_address)) < 0) {
+    if (sendto(pimpl_->broadcast_sock, message.data, message.size, 0, (struct sockaddr *) &broadcasting_address, sizeof(broadcasting_address)) < 0) {
         perror("Error sending broadcast message");
         return false;
     }
@@ -170,7 +183,7 @@ bool network::receive(buffer out_message, address *out_sender_addr) {
     sockaddr_in sender_address;
     socklen_t address_length = sizeof(sender_address);
 
-    int received_length = recvfrom(receiving_sock_, out_message.data, out_message.size, 0, (struct sockaddr *) &sender_address, &address_length);
+    int received_length = recvfrom(pimpl_->receiving_sock, out_message.data, out_message.size, 0, (struct sockaddr *) &sender_address, &address_length);
     if (received_length < 0) {
         // TODO: check if this error or async
         return false;
@@ -186,7 +199,7 @@ bool network::receive(buffer out_message, address *out_sender_addr) {
 }
 
 network::~network() {
-    close(receiving_sock_);
-    close(broadcast_sock_);
-    close(peer2peer_sock_);
+    close(pimpl_->receiving_sock);
+    close(pimpl_->broadcast_sock);
+    close(pimpl_->peer2peer_sock);
 }

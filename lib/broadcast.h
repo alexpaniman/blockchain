@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
 
 
@@ -52,6 +53,10 @@ namespace std {
     };
 }
 
+
+struct network_impl;
+
+
 class network {
 public:
     network(uint16_t port);
@@ -62,18 +67,11 @@ public:
 
     network(const network &other) = delete;
     network(const network &&other):
-        port_(other.port_),
-        broadcast_sock_(other.broadcast_sock_),
-        receiving_sock_(other.receiving_sock_),
-        peer2peer_sock_(other.peer2peer_sock_) {
+        pimpl_(std::move(other.pimpl_)) {
     }
 
     ~network();
 
 private:
-    uint16_t port_;
-
-    int broadcast_sock_;
-    int receiving_sock_;
-    int peer2peer_sock_;
+    std::shared_ptr<network_impl> pimpl_;
 };
