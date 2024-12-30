@@ -1,30 +1,12 @@
 #pragma once
 
+#include "buffer.h"
+
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
 
-
-struct buffer {
-    void *data;
-    std::size_t size;
-
-    buffer(void *data, std::size_t size):
-        data(data),
-        size(size) {
-    }
-
-    template <typename type, std::size_t size>
-    buffer(type array[size]):
-        buffer(array, size * sizeof(type)) {
-    }
-
-    template <typename type>
-    buffer(type &element):
-        buffer(&element, sizeof(type)) {
-    }
-};
 
 // Opaque storage for address of a node (ip + port)
 struct address {
@@ -36,12 +18,12 @@ struct address {
         return std::memcmp(data, other.data, sizeof(address));
     }
 
-    constexpr bool operator==(const address &other) const { return ((*this) <=> other) == 0; };
-    constexpr bool operator!=(const address &other) const { return ((*this) <=> other) != 0; };
-    constexpr bool operator< (const address &other) const { return ((*this) <=> other) <  0; };
-    constexpr bool operator> (const address &other) const { return ((*this) <=> other) >  0; };
-    constexpr bool operator>=(const address &other) const { return ((*this) <=> other) >= 0; };
-    constexpr bool operator<=(const address &other) const { return ((*this) <=> other) <= 0; };
+    bool operator==(const address &other) const = default;
+    bool operator!=(const address &other) const = default;
+    bool operator< (const address &other) const = default;
+    bool operator> (const address &other) const = default;
+    bool operator>=(const address &other) const = default;
+    bool operator<=(const address &other) const = default;
 };
 
 namespace std {
@@ -75,3 +57,4 @@ public:
 private:
     std::shared_ptr<network_impl> pimpl_;
 };
+

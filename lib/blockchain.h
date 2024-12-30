@@ -211,9 +211,10 @@ private:
 };
 
 
+template <typename network_type>
 class blockchain {
 public:
-    blockchain(uint16_t channel, network &&net):
+    blockchain(uint16_t channel, network_type &&net):
         net_(std::move(net)),
         channel_(channel),
         arranged_blocks_(),
@@ -240,7 +241,7 @@ public:
     }
 
 private:
-    network net_;
+    network_type net_;
     uint16_t channel_;
 
     static constexpr arranged_block_index initial_block_index = 0;
