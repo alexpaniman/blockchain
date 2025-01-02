@@ -109,8 +109,7 @@ void handle_sigwinch(int signo) {
 }
 
 void handle_sigint(int signo) {
-    printf(ENABLE_CURSOR);
-    disable_raw_mode();
+    global_mux->~log_multiplexer();
 
     exit(0);
 }
@@ -127,22 +126,24 @@ log_multiplexer::log_multiplexer():
     current_(0),
     vscroll_(VSCROLL_FOLLOW),
     hscroll_(0) {
-
     assert(!global_mux && "There can only be one log multiplexer at a time!");
 
-    global_mux = this;
-    redraw();
+    printf("\x1b[?1049h");
 
+    global_mux = this;
     register_simple_signal(SIGWINCH, handle_sigwinch);
     register_simple_signal(SIGINT,   handle_sigint);
 
     enable_raw_mode();
     printf(DISABLE_CURSOR);
+    redraw();
 }
 
 log_multiplexer::~log_multiplexer() {
     printf(ENABLE_CURSOR);
     disable_raw_mode();
+
+    printf("\x1b[?1049l");
 
     register_simple_signal(SIGWINCH, SIG_DFL);
     register_simple_signal(SIGINT,  SIG_DFL);
