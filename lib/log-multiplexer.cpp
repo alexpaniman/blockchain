@@ -81,13 +81,11 @@ void split_line(std::vector<std::string> &lines, const std::string &text) {
 inline constexpr int VSCROLL_FOLLOW = -1;
 
 void print_page(const std::vector<std::string> &lines, int rows, int cols, int vscroll, int hscroll) {
-    if (vscroll == VSCROLL_FOLLOW)
-        vscroll = lines.size() - rows;
+    bool follow = vscroll == VSCROLL_FOLLOW;
+    if (follow)
+        vscroll = rows > lines.size() ? 0 : lines.size() - rows;
 
-    if (lines.size() <= rows) // Disable scroll when there is little text
-        vscroll = 0;
-
-    for (int i = vscroll; i < rows + vscroll; ++ i) {
+    for (int i = vscroll + follow; i < rows + vscroll; ++ i) {
         if (i + 1 > lines.size())
             break;
 
@@ -98,6 +96,9 @@ void print_page(const std::vector<std::string> &lines, int rows, int cols, int v
             putchar(lines[i][j]);
         }
     }
+
+    if (follow)
+        printf("\x1b[47m \x1b[0m\n");
 }
 
 
