@@ -117,8 +117,7 @@ void handle_sigwinch(int signo) {
 }
 
 void handle_sigint(int signo) {
-    global_mux->~log_multiplexer();
-
+    global_mux->~log_multiplexer(); // TODO: don't use destructor
     exit(0);
 }
 
@@ -136,24 +135,25 @@ std::string make_modeline(int cols, const std::string &left, const std::string &
     return modeline;
 }
 
-int &get_vscroll(std::map<int, int> &vscroll, int log_id) {
-    auto i = vscroll.find(log_id);
-    if (i == vscroll.end())
-        return vscroll[log_id] = -1;
-
-    return i->second;
-}
-
 } // end anonymous namespace
 
 
 log_multiplexer* get_global_log_multiplexer() { return global_mux; }
 
 
+pane::pane(std::string name):
+    name(std::move(name)),
+    vscroll(VSCROLL_FOLLOW),
+    hscroll(0) {
+
+}
+
 
 log_multiplexer::log_multiplexer():
-    current_(0) {
+    current_(-1) {
     assert(!global_mux && "There can only be one log multiplexer at a time!");
+
+    create_pane(-1, "-");
 
     printf("\x1b[?1049h");
 
@@ -178,6 +178,11 @@ log_multiplexer::~log_multiplexer() {
     global_mux = nullptr;
 }
 
+
+void log_multiplexer::create_pane(int log_id, std::string name) {
+    panes_.emplace(log_id, std::move(name));
+}
+
 void log_multiplexer::run() {
     while (true) {
         char symbols[3];
@@ -193,24 +198,25 @@ void log_multiplexer::run() {
 
         -- rows;
 
-        int &vscroll = get_vscroll(vscroll_, current_), &hscroll = hscroll_[current_];
+        pane &current = panes_.at(current_);
+        int &hscroll = current.hscroll, &vscroll = current.vscroll;
 
         switch (symbols[0]) {
             case    'q': this->~log_multiplexer(); exit(0); break; // TODO: don't use exit
 
-            case    '<': if (current_ != 0)             current_ --;              break;
-            case    '>':                                current_ ++;              break;
+            case    '<': if (panes_.count(current_ - 1)) current_ --;              break;
+            case    '>': if (panes_.count(current_ + 1)) current_ ++;              break;
 
-            case    'h': if (hscroll != 0)              hscroll --;               break;
-            case    'l':                                hscroll ++;               break;
+            case    'h': if (hscroll != 0)               hscroll --;               break;
+            case    'l':                                 hscroll ++;               break;
 
-            case    'g':                                vscroll = 0;              break;
-            case    'G':                                vscroll = VSCROLL_FOLLOW; break;
+            case    'g':                                 vscroll = 0;              break;
+            case    'G':                                 vscroll = VSCROLL_FOLLOW; break;
 
-            case    'j': if (vscroll != VSCROLL_FOLLOW) vscroll ++;               break;
-            case '\x04': if (vscroll != VSCROLL_FOLLOW) vscroll += rows / 2;      break;
+            case    'j': if (vscroll != VSCROLL_FOLLOW)  vscroll ++;               break;
+            case '\x04': if (vscroll != VSCROLL_FOLLOW)  vscroll += rows / 2;      break;
 
-            case    'k': if (vscroll != 0)              vscroll --;               break;
+            case    'k': if (vscroll != 0)               vscroll --;               break;
             case '\x15':
                 if (vscroll == VSCROLL_FOLLOW)
                     vscroll -= rows / 2;
@@ -223,11 +229,11 @@ void log_multiplexer::run() {
         }
 
         if (vscroll < VSCROLL_FOLLOW) {
-            vscroll = logs_[current_].size() - rows;
+            vscroll = current.lines.size() - rows;
             vscroll = vscroll < 0 ? 0 : vscroll;
         }
 
-        if (vscroll > static_cast<int>(logs_[current_].size()) - rows)
+        if (vscroll > static_cast<int>(current.lines.size()) - rows)
             vscroll = VSCROLL_FOLLOW;
 
         redraw();
@@ -237,7 +243,7 @@ void log_multiplexer::run() {
 void log_multiplexer::append(int log_id, const std::string &message) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        split_line(logs_[log_id], message);
+        split_line(panes_.at(log_id).lines, message);
     }
 
     redraw();
@@ -250,32 +256,32 @@ void log_multiplexer::redraw() {
     if (rows == 0 || cols == 0)
         return;
 
-    int &vscroll = get_vscroll(vscroll_, current_), &hscroll = hscroll_[current_];
+    pane &current = panes_.at(current_);
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         printf(RESET_SCREEN);
-        print_page(logs_[current_], rows - 1, cols, vscroll, hscroll);
+        print_page(current.lines, rows - 1, cols, current.vscroll, current.hscroll);
     }
 
     {
         printf(MOVE_CURSOR(%d, 0), rows);
 
         std::string location;
-        switch (vscroll) {
-            case VSCROLL_FOLLOW: location += "BOT";                          break;
-            case              0: location += "TOP";                          break;
-            default:             location += "+" + std::to_string(vscroll);  break;
+        switch (current.vscroll) {
+            case VSCROLL_FOLLOW: location += "BOT";                                  break;
+            case              0: location += "TOP";                                  break;
+            default:             location += "+" + std::to_string(current.vscroll);  break;
         }
 
-        switch (hscroll) {
-            case              0:                                             break;
-            default:             location += " +" + std::to_string(hscroll); break;
+        switch (current.hscroll) {
+            case              0:                                                     break;
+            default:             location += " +" + std::to_string(current.hscroll); break;
         }
 
         location += " ";
 
-        std::string marker = "[" + std::to_string(current_) + "]";
+        std::string marker = "[" + current.name + "]";
 
         std::string modeline = make_modeline(cols, marker, location);
         draw_horizontal_line(modeline, cols);
