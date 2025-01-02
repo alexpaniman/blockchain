@@ -25,8 +25,9 @@ public:
 
 private:
     std::map<int, std::vector<std::string>> logs_;
+
     int current_;
-    int vscroll_, hscroll_;
+    std::map<int, int> vscroll_, hscroll_;
 
     std::mutex mutex_;
 };

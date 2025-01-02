@@ -136,6 +136,14 @@ std::string make_modeline(int cols, const std::string &left, const std::string &
     return modeline;
 }
 
+int &get_vscroll(std::map<int, int> &vscroll, int log_id) {
+    auto i = vscroll.find(log_id);
+    if (i == vscroll.end())
+        return vscroll[log_id] = -1;
+
+    return i->second;
+}
+
 } // end anonymous namespace
 
 
@@ -144,9 +152,7 @@ log_multiplexer* get_global_log_multiplexer() { return global_mux; }
 
 
 log_multiplexer::log_multiplexer():
-    current_(0),
-    vscroll_(VSCROLL_FOLLOW),
-    hscroll_(0) {
+    current_(0) {
     assert(!global_mux && "There can only be one log multiplexer at a time!");
 
     printf("\x1b[?1049h");
@@ -187,40 +193,42 @@ void log_multiplexer::run() {
 
         -- rows;
 
+        int &vscroll = get_vscroll(vscroll_, current_), &hscroll = hscroll_[current_];
+
         switch (symbols[0]) {
             case    'q': this->~log_multiplexer(); exit(0); break; // TODO: don't use exit
 
-            case    '<': if (current_ != 0)              current_ --;               break;
-            case    '>':                                 current_ ++;               break;
+            case    '<': if (current_ != 0)             current_ --;              break;
+            case    '>':                                current_ ++;              break;
 
-            case    'h': if (hscroll_ != 0)              hscroll_ --;               break;
-            case    'l':                                 hscroll_ ++;               break;
+            case    'h': if (hscroll != 0)              hscroll --;               break;
+            case    'l':                                hscroll ++;               break;
 
-            case    'g':                                 vscroll_ = 0;              break;
-            case    'G':                                 vscroll_ = VSCROLL_FOLLOW; break;
+            case    'g':                                vscroll = 0;              break;
+            case    'G':                                vscroll = VSCROLL_FOLLOW; break;
 
-            case    'j': if (vscroll_ != VSCROLL_FOLLOW) vscroll_ ++;               break;
-            case '\x04': if (vscroll_ != VSCROLL_FOLLOW) vscroll_ += rows / 2;      break;
+            case    'j': if (vscroll != VSCROLL_FOLLOW) vscroll ++;               break;
+            case '\x04': if (vscroll != VSCROLL_FOLLOW) vscroll += rows / 2;      break;
 
-            case    'k': if (vscroll_ != 0)              vscroll_ --;               break;
+            case    'k': if (vscroll != 0)              vscroll --;               break;
             case '\x15':
-                if (vscroll_ == VSCROLL_FOLLOW)
-                    vscroll_ -= rows / 2;
+                if (vscroll == VSCROLL_FOLLOW)
+                    vscroll -= rows / 2;
                 else {
-                    vscroll_ -= rows / 2;
-                    if (vscroll_ < 0)
-                        vscroll_ = 0;
+                    vscroll -= rows / 2;
+                    if (vscroll < 0)
+                        vscroll = 0;
                 }
                 break;
         }
 
-        if (vscroll_ < VSCROLL_FOLLOW) {
-            vscroll_ = logs_[current_].size() - rows;
-            vscroll_ = vscroll_ < 0 ? 0 : vscroll_;
+        if (vscroll < VSCROLL_FOLLOW) {
+            vscroll = logs_[current_].size() - rows;
+            vscroll = vscroll < 0 ? 0 : vscroll;
         }
 
-        if (vscroll_ > static_cast<int>(logs_[current_].size()) - rows)
-            vscroll_ = VSCROLL_FOLLOW;
+        if (vscroll > static_cast<int>(logs_[current_].size()) - rows)
+            vscroll = VSCROLL_FOLLOW;
 
         redraw();
     }
@@ -242,25 +250,27 @@ void log_multiplexer::redraw() {
     if (rows == 0 || cols == 0)
         return;
 
+    int &vscroll = get_vscroll(vscroll_, current_), &hscroll = hscroll_[current_];
+
     {
         std::lock_guard<std::mutex> lock(mutex_);
         printf(RESET_SCREEN);
-        print_page(logs_[current_], rows - 1, cols, vscroll_, hscroll_);
+        print_page(logs_[current_], rows - 1, cols, vscroll, hscroll);
     }
 
     {
         printf(MOVE_CURSOR(%d, 0), rows);
 
         std::string location;
-        switch (vscroll_) {
-            case VSCROLL_FOLLOW: location += "BOT";                           break;
-            case              0: location += "TOP";                           break;
-            default:             location += "+" + std::to_string(vscroll_);  break;
+        switch (vscroll) {
+            case VSCROLL_FOLLOW: location += "BOT";                          break;
+            case              0: location += "TOP";                          break;
+            default:             location += "+" + std::to_string(vscroll);  break;
         }
 
-        switch (hscroll_) {
-            case              0:                                              break;
-            default:             location += " +" + std::to_string(hscroll_); break;
+        switch (hscroll) {
+            case              0:                                             break;
+            default:             location += " +" + std::to_string(hscroll); break;
         }
 
         location += " ";
