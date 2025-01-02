@@ -1,6 +1,5 @@
-#pragma once
-
 #include "log-multiplexer.h"
+#include "log.h"
 
 #include <cassert>
 #include <cctype>
@@ -28,10 +27,10 @@
 namespace {
 
 
-    void draw_horizontal_line(const std::string &text, int num_cols) {
-        printf(FOREGROUND_BLACK BACKGROUND_GREEN);
+void draw_horizontal_line(const std::string &text, int num_cols) {
+    printf(FOREGROUND_BLACK BACKGROUND_GREEN);
 
-        for (int i = 0; i < num_cols; ++ i)
+    for (int i = 0; i < num_cols; ++ i)
         printf("%c", i < text.size() ? text[i] : ' ');
 
     fflush(stdout);
@@ -69,6 +68,38 @@ void register_simple_signal(int signal, void (*handler)(int signo)) {
     sigaction(signal, &sa, NULL);
 }
 
+void split_line(std::vector<std::string> &lines, const std::string &text) {
+    for (auto i = text.begin(); i != text.end(); ++ i) {
+        if (lines.empty() || lines.back().back() == '\n')
+            lines.emplace_back();
+
+        lines.back().push_back(*i);
+    }
+}
+
+
+inline constexpr int VSCROLL_FOLLOW = -1;
+
+void print_page(const std::vector<std::string> &lines, int rows, int cols, int vscroll, int hscroll) {
+    if (vscroll == VSCROLL_FOLLOW)
+        vscroll = lines.size() - rows;
+
+    if (lines.size() <= rows) // Disable scroll when there is little text
+        vscroll = 0;
+
+    for (int i = vscroll; i < rows + vscroll; ++ i) {
+        if (i + 1 > lines.size())
+            break;
+
+        for (int j = hscroll; j < cols + hscroll; ++ j) {
+            if (j + 1 > lines[i].size())
+                break;
+
+            putchar(lines[i][j]);
+        }
+    }
+}
+
 
 log_multiplexer *global_mux = nullptr; // <= stores global multiplexer for handler
 
@@ -92,7 +123,9 @@ log_multiplexer* get_global_log_multiplexer() { return global_mux; }
 
 
 log_multiplexer::log_multiplexer():
-    current_(0) {
+    current_(0),
+    vscroll_(VSCROLL_FOLLOW),
+    hscroll_(0) {
 
     assert(!global_mux && "There can only be one log multiplexer at a time!");
 
@@ -122,23 +155,49 @@ void log_multiplexer::run() {
         int num_read = read(STDIN_FILENO, &symbols, 3);
 
         if (num_read == 3 && symbols[0] == '\x1b' && symbols[1] == '[') {
-            if (symbols[2] == 'D')
-                symbols[0] = 'h'; // <= handle <left arrow> the same as <h>
-
-            if (symbols[2] == 'C')
-                symbols[0] = 'l'; // <= handle <right arrow> the same as <l>
-
-            if (symbols[0] != '\x1b')
-                num_read = 1;
+            if (symbols[2] == 'D') symbols[0] = '<'; // <= handle the same as '<'
+            if (symbols[2] == 'C') symbols[0] = '>'; // <= handle the same as '>'
         }
 
-        switch (std::tolower(symbols[0])) {
-            case '\x1b': return;
-            case    'q': return;
+        int rows, cols;
+        get_terminal_size(&rows, &cols);
 
-            case    'h': if (current_ >       0) current_ --; break;
-            case    'l': if (current_ < INT_MAX) current_ ++; break;
+        -- rows;
+
+        switch (symbols[0]) {
+            case    'q': this->~log_multiplexer(); exit(0); break; // TODO: don't use exit
+
+            case    '<': if (current_ != 0)              current_ --;               break;
+            case    '>':                                 current_ ++;               break;
+
+            case    'h': if (hscroll_ != 0)              hscroll_ --;               break;
+            case    'l':                                 hscroll_ ++;               break;
+
+            case    'g':                                 vscroll_ = 0;              break;
+            case    'G':                                 vscroll_ = VSCROLL_FOLLOW; break;
+
+            case    'j': if (vscroll_ != VSCROLL_FOLLOW) vscroll_ ++;               break;
+            case '\x04': if (vscroll_ != VSCROLL_FOLLOW) vscroll_ += rows / 2;      break;
+
+            case    'k': if (vscroll_ != 0)              vscroll_ --;               break;
+            case '\x15':
+                if (vscroll_ == VSCROLL_FOLLOW)
+                    vscroll_ -= rows / 2;
+                else {
+                    vscroll_ -= rows / 2;
+                    if (vscroll_ < 0)
+                        vscroll_ = 0;
+                }
+                break;
         }
+
+        if (vscroll_ < VSCROLL_FOLLOW) {
+            vscroll_ = logs_[current_].size() - rows;
+            vscroll_ = vscroll_ < 0 ? 0 : vscroll_;
+        }
+
+        if (vscroll_ > static_cast<int>(logs_[current_].size()) - rows)
+            vscroll_ = VSCROLL_FOLLOW;
 
         redraw();
     }
@@ -147,23 +206,27 @@ void log_multiplexer::run() {
 void log_multiplexer::append(int log_id, const std::string &message) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        logs_[log_id].append(message);
+        split_line(logs_[log_id], message);
     }
 
     redraw();
 }
 
 void log_multiplexer::redraw() {
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        printf(RESET_SCREEN "%s", logs_[global_mux->current_].c_str());
-    }
-
     int rows, cols;
     get_terminal_size(&rows, &cols);
 
+    if (rows == 0 || cols == 0)
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        printf(RESET_SCREEN);
+        print_page(logs_[current_], rows - 1, cols, vscroll_, hscroll_);
+    }
+
     printf(MOVE_CURSOR(%d, 0), rows);
-    draw_horizontal_line("[" + std::to_string(current_) + "]", cols);
+    draw_horizontal_line("[" + std::to_string(current_) + " " + std::to_string(vscroll_) + "]", cols);
 
     fflush(stdout);
 }

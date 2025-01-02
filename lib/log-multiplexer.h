@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <vector>
 #include <string>
 #include <mutex>
 
@@ -23,11 +24,13 @@ public:
     void redraw();
 
 private:
-    std::map<int, std::string> logs_;
+    std::map<int, std::vector<std::string>> logs_;
     int current_;
+    int vscroll_, hscroll_;
 
     std::mutex mutex_;
 };
+
 
 log_multiplexer* get_global_log_multiplexer();
 
