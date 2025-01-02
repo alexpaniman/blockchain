@@ -65,7 +65,7 @@ bool simulation::receive(buffer out_message, address *out_sender_addr) {
 
     // TODO: receive part's of the packet...
 
-    memcpy(out_message.data, &*received.data.begin(), out_message.size);
+    memcpy(out_message.data, &*received.data.begin(), received.data.size());
     *out_sender_addr = received.sender;
 
     return true;

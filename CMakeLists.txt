@@ -11,7 +11,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
 
-add_library(blockchain-lib lib/broadcast.cpp lib/simulation.cpp lib/sha256.cpp)
+add_library(blockchain-lib lib/broadcast.cpp lib/simulation.cpp lib/sha256.cpp lib/log-multiplexer.cpp)
 target_include_directories(blockchain-lib PUBLIC lib)
 target_link_options(blockchain-lib PRIVATE -Wl,--gc-sections)
 

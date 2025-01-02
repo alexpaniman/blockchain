@@ -2,7 +2,6 @@
 
 #include "crypto.h"
 #include "broadcast.h"
-#include "log.h"
 
 #include <chrono>
 #include <cstdint>
@@ -15,8 +14,9 @@
 #include <array>
 #include <unordered_map>
 #include <cassert>
-#include <queue>
 
+#define LOG_ID node_id_
+#include "log.h"
 
 // == ACTION
 
@@ -214,7 +214,8 @@ private:
 template <typename network_type>
 class blockchain {
 public:
-    blockchain(uint16_t channel, network_type &&net):
+    blockchain(int node_id, uint16_t channel, network_type &&net):
+        node_id_(node_id),
         net_(std::move(net)),
         channel_(channel),
         arranged_blocks_(),
@@ -241,6 +242,8 @@ public:
     }
 
 private:
+    int node_id_;
+
     network_type net_;
     uint16_t channel_;
 
@@ -570,6 +573,34 @@ private:
     void broadcast(transaction message) {
         message.sequence_number = current_sequence_number_ ++;
         net_.broadcast(message);
+    }
+
+    char who_wins() {
+        auto longest = find_longest();
+
+        char counts[256] = {};
+        while (true) {
+            if (longest.index() == 0)
+                break;
+
+            for (int i = 0; i < longest.data().data.count_votes; ++ i) {
+                counts[longest.data().data.votes[i]] ++;
+            }
+
+            auto next_index = block_registry_[longest.data().previous_hash];
+            longest = arranged_block_iterable_proxy{arranged_blocks_, next_index};
+        }
+
+        char winner = '0';
+        int max_votes = 0;
+        for (int candidate = 0; candidate < 256; ++ candidate) {
+            if (max_votes < counts[candidate]) {
+                max_votes = counts[candidate];
+                winner = candidate;
+            }
+        }
+
+        return winner;
     }
 
 public:
