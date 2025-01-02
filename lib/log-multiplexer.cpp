@@ -89,15 +89,22 @@ void print_page(const std::vector<std::string> &lines, int rows, int cols, int v
         if (i + 1 > lines.size())
             break;
 
+        bool has_newline = false;
         for (int j = hscroll; j < cols + hscroll; ++ j) {
             if (j + 1 > lines[i].size())
                 break;
 
             putchar(lines[i][j]);
+            if (lines[i][j] == '\n')
+                has_newline = true;
         }
+
+        // TODO: what if last line of the log is written partially without newline?
+        if (!has_newline)
+            putchar('\n');
     }
 
-    if (follow)
+    if (follow && hscroll == 0)
         printf("\x1b[47m \x1b[0m\n");
 }
 
