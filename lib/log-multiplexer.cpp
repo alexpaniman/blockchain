@@ -226,8 +226,23 @@ void log_multiplexer::redraw() {
         print_page(logs_[current_], rows - 1, cols, vscroll_, hscroll_);
     }
 
-    printf(MOVE_CURSOR(%d, 0), rows);
-    draw_horizontal_line("[" + std::to_string(current_) + " " + std::to_string(vscroll_) + "]", cols);
+    {
+        printf(MOVE_CURSOR(%d, 0), rows);
+
+        std::string text = "[" + std::to_string(current_) + "] ";
+        switch (vscroll_) {
+            case VSCROLL_FOLLOW: text += "BOT";                          break;
+            case              0: text += "TOP";                          break;
+            default:             text += "+" + std::to_string(vscroll_); break;
+        }
+
+        switch (hscroll_) {
+            case              0:                                         break;
+            default:             text += "+" + std::to_string(hscroll_); break;
+        }
+
+        draw_horizontal_line(text, cols);
+    }
 
     fflush(stdout);
 }
