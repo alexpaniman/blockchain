@@ -115,6 +115,19 @@ void handle_sigint(int signo) {
 }
 
 
+
+std::string make_modeline(int cols, const std::string &left, const std::string &right) {
+    std::string modeline = left;
+
+    for (int i = 0; i < cols - (int) left.size() - (int) right.size(); ++ i)
+        modeline.push_back(' ');
+
+    modeline += right;
+
+    assert(modeline.size() == cols);
+    return modeline;
+}
+
 } // end anonymous namespace
 
 
@@ -230,19 +243,24 @@ void log_multiplexer::redraw() {
     {
         printf(MOVE_CURSOR(%d, 0), rows);
 
-        std::string text = "[" + std::to_string(current_) + "] ";
+        std::string location;
         switch (vscroll_) {
-            case VSCROLL_FOLLOW: text += "BOT";                          break;
-            case              0: text += "TOP";                          break;
-            default:             text += "+" + std::to_string(vscroll_); break;
+            case VSCROLL_FOLLOW: location += "BOT";                           break;
+            case              0: location += "TOP";                           break;
+            default:             location += "+" + std::to_string(vscroll_);  break;
         }
 
         switch (hscroll_) {
-            case              0:                                         break;
-            default:             text += "+" + std::to_string(hscroll_); break;
+            case              0:                                              break;
+            default:             location += " +" + std::to_string(hscroll_); break;
         }
 
-        draw_horizontal_line(text, cols);
+        location += " ";
+
+        std::string marker = "[" + std::to_string(current_) + "]";
+
+        std::string modeline = make_modeline(cols, marker, location);
+        draw_horizontal_line(modeline, cols);
     }
 
     fflush(stdout);
