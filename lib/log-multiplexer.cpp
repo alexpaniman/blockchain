@@ -85,7 +85,8 @@ void print_page(const std::vector<std::string> &lines, int rows, int cols, int v
     if (follow)
         vscroll = rows > lines.size() ? 0 : lines.size() - rows;
 
-    for (int i = vscroll + follow; i < rows + vscroll; ++ i) {
+    bool shift = follow && lines.size() >= rows;
+    for (int i = vscroll + shift; i < rows + vscroll; ++ i) {
         if (i + 1 > lines.size())
             break;
 
