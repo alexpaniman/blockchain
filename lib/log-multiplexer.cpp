@@ -240,13 +240,28 @@ void log_multiplexer::run() {
     }
 }
 
+void log_multiplexer::assign(int log_id, const std::string &message) {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        pane &current = panes_.at(log_id);
+
+        current.lines.clear();
+        split_line(current.lines, message);
+    }
+
+    if (log_id == current_)
+        redraw();
+}
+
 void log_multiplexer::append(int log_id, const std::string &message) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         split_line(panes_.at(log_id).lines, message);
     }
 
-    redraw();
+    if (log_id == current_)
+        redraw();
 }
 
 void log_multiplexer::redraw() {
