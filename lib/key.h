@@ -2,105 +2,132 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <string>
 
-enum key: uint16_t {
-    NONE      = 0x00,
 
-    // == Alphabet
-    A         = 0x01,
-    B         = 0x02,
-    C         = 0x03,
-    D         = 0x04,
-    E         = 0x05,
-    F         = 0x06,
-    G         = 0x07,
-    H         = 0x08,
-    I         = 0x09,
-    J         = 0x0A,
-    K         = 0x0B,
-    L         = 0x0C,
-    M         = 0x0D,
-    N         = 0x0E,
-    O         = 0x0F,
-    P         = 0x10,
-    Q         = 0x11,
-    R         = 0x12,
-    S         = 0x13,
-    T         = 0x14,
-    U         = 0x15,
-    V         = 0x16,
-    W         = 0x17,
-    X         = 0x18,
-    Y         = 0x19,
-    Z         = 0x1A,
+using keybinding = uint16_t;
 
-    // == Numbers
-    N0        = 0x1B,
-    N1        = 0x1C,
-    N2        = 0x1D,
-    N3        = 0x1E,
-    N4        = 0x1F,
-    N5        = 0x20,
-    N6        = 0x21,
-    N7        = 0x22,
-    N8        = 0x23,
-    N9        = 0x24,
-
+struct key {
+    static inline constexpr keybinding NONE      = 0;
+    
     // == Functional
-    F0        = 0x25,
-    F1        = 0x26,
-    F2        = 0x27,
-    F3        = 0x28,
-    F4        = 0x29,
-    F5        = 0x2A,
-    F6        = 0x2B,
-    F7        = 0x2C,
-    F8        = 0x2D,
-    F9        = 0x2E,
-    F10       = 0x2F,
-    F11       = 0x30,
-    F12       = 0x31,
-    F13       = 0x32,
-    F14       = 0x33,
-    F15       = 0x34,
-    F16       = 0x35,
-    F17       = 0x36,
-    F18       = 0x37,
-    F19       = 0x38,
-    F20       = 0x39,
-
-    // == Spacing
-    TAB       = 0x3A,
-    SPACE     = 0x3B,
-    ENTER     = 0x3C,
+    static inline constexpr keybinding F0        = 1;
+    static inline constexpr keybinding F1        = 2;
+    static inline constexpr keybinding F2        = 3;
+    static inline constexpr keybinding F3        = 4;
+    static inline constexpr keybinding F4        = 5;
+    static inline constexpr keybinding F5        = 6;
+    static inline constexpr keybinding F6        = 7;
+    static inline constexpr keybinding F7        = 8;
+    static inline constexpr keybinding F8        = 9;
+    static inline constexpr keybinding F9        = 10;
+    static inline constexpr keybinding F10       = 11;
+    static inline constexpr keybinding F11       = 12;
+    static inline constexpr keybinding F12       = 13;
+    static inline constexpr keybinding F13       = 14;
+    static inline constexpr keybinding F14       = 15;
+    static inline constexpr keybinding F15       = 16;
+    static inline constexpr keybinding F16       = 17;
+    static inline constexpr keybinding F17       = 18;
+    static inline constexpr keybinding F18       = 19;
+    static inline constexpr keybinding F19       = 20;
+    static inline constexpr keybinding F20       = 21;
 
     // == Deleting
-    BACKSPACE = 0x3D,
-    DELETE    = 0x3E,
+    static inline constexpr keybinding DELETE    = 22;
 
     // == Special
-    ESCAPE    = 0x3F,
-    INSERT    = 0x40,
+    static inline constexpr keybinding INSERT    = 23;
 
     // == Navigation
-    UP        = 0x41,
-    DOWN      = 0x42,
-    RIGHT     = 0x43,
-    LEFT      = 0x44,
-    HOME      = 0x45,
-    END       = 0x46,
-    PAGE_UP   = 0x47,
-    PAGE_DOWN = 0x48,
+    static inline constexpr keybinding UP        = 24;
+    static inline constexpr keybinding DOWN      = 25;
+    static inline constexpr keybinding RIGHT     = 26;
+    static inline constexpr keybinding LEFT      = 27;
+
+    static inline constexpr keybinding HOME      = 28;
+    static inline constexpr keybinding END       = 29;
+    static inline constexpr keybinding PAGE_UP   = 30;
+    static inline constexpr keybinding PAGE_DOWN = 31;
+
+    // Number of special keys that don't have a corresponding char,
+    // so all of the above, including PgDn, Home and such.
+    static inline constexpr keybinding NUM_EXTRA = 32;
+
+    template <unsigned char symbol>
+    static inline constexpr keybinding from_char = NUM_EXTRA + symbol;
+
+    // == Spacing
+    static inline constexpr keybinding TAB       = from_char<'\t'>;
+    static inline constexpr keybinding SPACE     = from_char<' '>;
+    static inline constexpr keybinding ENTER     = from_char<'\n'>;
+
+    // == Deleting
+    static inline constexpr keybinding BACKSPACE = from_char<127>;
+
+    // == Special
+    static inline constexpr keybinding ESCAPE    = from_char<'\x1b'>;
+
+    // == Alphabet
+    static inline constexpr keybinding A         = from_char<'a'>;
+    static inline constexpr keybinding B         = from_char<'b'>;
+    static inline constexpr keybinding C         = from_char<'c'>;
+    static inline constexpr keybinding D         = from_char<'d'>;
+    static inline constexpr keybinding E         = from_char<'e'>;
+    static inline constexpr keybinding F         = from_char<'f'>;
+    static inline constexpr keybinding G         = from_char<'g'>;
+    static inline constexpr keybinding H         = from_char<'h'>;
+    static inline constexpr keybinding I         = from_char<'i'>;
+    static inline constexpr keybinding J         = from_char<'j'>;
+    static inline constexpr keybinding K         = from_char<'k'>;
+    static inline constexpr keybinding L         = from_char<'l'>;
+    static inline constexpr keybinding M         = from_char<'m'>;
+    static inline constexpr keybinding N         = from_char<'n'>;
+    static inline constexpr keybinding O         = from_char<'o'>;
+    static inline constexpr keybinding P         = from_char<'p'>;
+    static inline constexpr keybinding Q         = from_char<'q'>;
+    static inline constexpr keybinding R         = from_char<'r'>;
+    static inline constexpr keybinding S         = from_char<'s'>;
+    static inline constexpr keybinding T         = from_char<'t'>;
+    static inline constexpr keybinding U         = from_char<'u'>;
+    static inline constexpr keybinding V         = from_char<'v'>;
+    static inline constexpr keybinding W         = from_char<'w'>;
+    static inline constexpr keybinding X         = from_char<'x'>;
+    static inline constexpr keybinding Y         = from_char<'y'>;
+    static inline constexpr keybinding Z         = from_char<'z'>;
+
+    // == Numbers
+    static inline constexpr keybinding N0        = from_char<'0'>;
+    static inline constexpr keybinding N1        = from_char<'1'>;
+    static inline constexpr keybinding N2        = from_char<'2'>;
+    static inline constexpr keybinding N3        = from_char<'3'>;
+    static inline constexpr keybinding N4        = from_char<'4'>;
+    static inline constexpr keybinding N5        = from_char<'5'>;
+    static inline constexpr keybinding N6        = from_char<'6'>;
+    static inline constexpr keybinding N7        = from_char<'7'>;
+    static inline constexpr keybinding N8        = from_char<'8'>;
+    static inline constexpr keybinding N9        = from_char<'9'>;
+
+    static inline constexpr keybinding of(unsigned char symbol) {
+        return NUM_EXTRA + symbol;
+    }
+
+    inline static constexpr char from(keybinding key) {
+        return (key & MASK) - NUM_EXTRA;
+    }
+
+    static inline constexpr keybinding MASK = 0xFFF;
 };
 
 struct mod {
-    static inline constexpr uint32_t CTRL  = 0x100;
-    static inline constexpr uint32_t ALT   = 0x200;
-    static inline constexpr uint32_t SHIFT = 0x400;
-    static inline constexpr uint32_t META  = 0x800;
+    static inline constexpr keybinding CTRL  = 0x1000;
+    static inline constexpr keybinding ALT   = 0x2000;
+    static inline constexpr keybinding SHIFT = 0x4000;
+    static inline constexpr keybinding META  = 0x8000;
+
+    static inline constexpr keybinding MASK = 0xF000;
 };
 
-inline constexpr int KEY_MASK = 0xFF;
-
-using keybinding = uint32_t;
+keybinding read_keybinding();
+std::string describe_keybinding(keybinding key);
 
