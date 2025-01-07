@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <cassert>
 
 
 using keybinding = uint16_t;
@@ -127,6 +129,32 @@ struct mod {
 
     static inline constexpr keybinding MASK = 0xF000;
 };
+
+// Parse emacs-like keybinding:
+inline consteval keybinding kbd(const char* key) {
+    keybinding mods = 0;
+
+    // TODO: handle corner cases
+
+    const char* parsed = key;
+    while (*parsed != '\0') {
+        if (*parsed == '-' && parsed != key) {
+            switch (*(parsed - 1)) {
+            case 'C': mods |= mod::CTRL;  break;
+            case 'M': mods |= mod::ALT;   break;
+            case 'S': mods |= mod::SHIFT; break;
+            }
+        }
+
+        ++ parsed;
+    }
+
+    -- parsed;
+    if ('A' <= *parsed && *parsed <= 'Z')
+        return key::of(*parsed - 'A' + 'a') | mod::SHIFT | mods;
+
+    return key::of(*parsed) | mods;
+}
 
 keybinding read_keybinding();
 std::string describe_keybinding(keybinding key);

@@ -1,21 +1,51 @@
 #pragma once
 
+#include "key.h"
+
 #include <map>
 #include <vector>
 #include <string>
 #include <mutex>
-#include <functional>
+#include <optional>
+#include <memory>
 
+
+using pane_id = int;
+
+
+struct location { int x, y; };
+
+struct pane_data {
+    std::optional<location> cursor;
+    std::vector<std::string> lines;
+};
+
+struct pane_action {
+    enum its_kind { SUBSTITUTE, REDRAW, IGNORE } kind = IGNORE;
+    pane_id substitute;
+};
+
+class pane_controller {
+public:
+    pane_data *pane = nullptr;
+
+    virtual pane_action update(keybinding key) = 0;
+    virtual ~pane_controller() = default;
+};
 
 struct pane {
-    pane(std::string name);
-
     std::string name;
-    std::vector<std::string> lines;
     int vscroll, hscroll;
-    std::map<char, std::function<int ()>> bindings;
 
-    // TODO: enum its_kind { LOG, IMAGE };
+    std::vector<std::string> lines;
+    std::map<keybinding, int> next;
+
+    enum its_mode { LOG, IMAGE } mode;
+    std::unique_ptr<pane_controller> controller;
+
+    pane(std::string name, pane::its_mode mode,
+         std::unique_ptr<pane_controller> controller = nullptr);
+
 };
 
 
@@ -31,8 +61,8 @@ public:
     log_multiplexer& operator=(const log_multiplexer &&other) = delete;
 
 
-    void create_pane(int pane_id, std::string name);
-    void connect_panes(int parent, int child);
+    void create_pane(int pane_id, std::string name, pane::its_mode mode,
+                     std::unique_ptr<pane_controller> controller = nullptr);
 
     void run();
     void assign(int pane_id, const std::string &message);
@@ -42,7 +72,6 @@ public:
 
 private:
     std::map<int, pane> panes_;
-    std::map<int, std::vector<int>> tree_;
 
     int current_;
     static constexpr int ROOT_PANE_ID = 0;

@@ -1,4 +1,5 @@
 #include "log-multiplexer.h"
+#include "key.h"
 #include "log.h"
 
 #include <cassert>
@@ -26,6 +27,9 @@
 
 namespace {
 
+void clamp_nonnegative(int &value) {
+    value = value < 0? 0 : value;
+}
 
 void draw_horizontal_line(const std::string &text, int num_cols) {
     printf(FOREGROUND_BLACK BACKGROUND_GREEN);
@@ -80,20 +84,29 @@ void split_line(std::vector<std::string> &lines, const std::string &text) {
 
 inline constexpr int VSCROLL_FOLLOW = -1;
 
-void print_page(const std::vector<std::string> &lines, int rows, int cols, int vscroll, int hscroll) {
-    bool follow = vscroll == VSCROLL_FOLLOW;
+void print_page(const std::vector<std::string> &lines, int rows, int cols, int vscroll, int hscroll, bool follow) {
     if (follow)
         vscroll = rows > lines.size() ? 0 : lines.size() - rows;
 
     bool shift = follow && lines.size() >= rows;
     for (int i = vscroll + shift; i < rows + vscroll; ++ i) {
-        if (i + 1 > lines.size())
+        if (i + 1 > static_cast<int>(lines.size()))
             break;
+
+        if (i < 0) {
+            putchar('\n');
+            continue;
+        }
 
         bool has_newline = false;
         for (int j = hscroll; j < cols + hscroll; ++ j) {
-            if (j + 1 > lines[i].size())
+            if (j + 1 > static_cast<int>(lines[i].size()))
                 break;
+
+            if (j < 0) {
+                putchar(' ');
+                continue;
+            }
 
             putchar(lines[i][j]);
             if (lines[i][j] == '\n')
@@ -141,11 +154,13 @@ std::string make_modeline(int cols, const std::string &left, const std::string &
 log_multiplexer* get_global_log_multiplexer() { return global_mux; }
 
 
-pane::pane(std::string name):
+pane::pane(std::string name, pane::its_mode mode,
+           std::unique_ptr<pane_controller> controller):
     name(std::move(name)),
     vscroll(VSCROLL_FOLLOW),
-    hscroll(0) {
-
+    hscroll(0),
+    mode(mode),
+    controller(std::move(controller)) {
 }
 
 
@@ -153,7 +168,7 @@ log_multiplexer::log_multiplexer():
     current_(-1) {
     assert(!global_mux && "There can only be one log multiplexer at a time!");
 
-    create_pane(-1, "-");
+    create_pane(-1, "-", pane::LOG);
 
     printf("\x1b[?1049h");
 
@@ -179,20 +194,13 @@ log_multiplexer::~log_multiplexer() {
 }
 
 
-void log_multiplexer::create_pane(int log_id, std::string name) {
-    panes_.emplace(log_id, std::move(name));
+void log_multiplexer::create_pane(int pane_id, std::string name, pane::its_mode mode,
+                                  std::unique_ptr<pane_controller> controller) {
+    panes_.emplace(pane_id, pane{std::move(name), mode, std::move(controller)});
 }
 
 void log_multiplexer::run() {
     while (true) {
-        char symbols[3];
-        int num_read = read(STDIN_FILENO, &symbols, 3);
-
-        if (num_read == 3 && symbols[0] == '\x1b' && symbols[1] == '[') {
-            if (symbols[2] == 'D') symbols[0] = '<'; // <= handle the same as '<'
-            if (symbols[2] == 'C') symbols[0] = '>'; // <= handle the same as '>'
-        }
-
         int rows, cols;
         get_terminal_size(&rows, &cols);
 
@@ -201,40 +209,58 @@ void log_multiplexer::run() {
         pane &current = panes_.at(current_);
         int &hscroll = current.hscroll, &vscroll = current.vscroll;
 
-        switch (symbols[0]) {
-            case    'q': this->~log_multiplexer(); exit(0); break; // TODO: don't use exit
+        int prev_vscroll = vscroll;
+        bool prev_follow = vscroll == VSCROLL_FOLLOW;
 
-            case    '<': if (panes_.count(current_ - 1)) current_ --;              break;
-            case    '>': if (panes_.count(current_ + 1)) current_ ++;              break;
+        int num_lines = current.lines.size();
+        int max_vscroll = num_lines - rows;
+        clamp_nonnegative(max_vscroll);
 
-            case    'h': if (hscroll != 0)               hscroll --;               break;
-            case    'l':                                 hscroll ++;               break;
+        switch (read_keybinding()) {
+            case key::LEFT     : current_ --;                            break;
+            case key::RIGHT    : current_ ++;                            break;
 
-            case    'g':                                 vscroll = 0;              break;
-            case    'G':                                 vscroll = VSCROLL_FOLLOW; break;
+            case kbd(      "h"): hscroll --;                             break;
+            case kbd(      "l"): hscroll ++;                             break;
 
-            case    'j': if (vscroll != VSCROLL_FOLLOW)  vscroll ++;               break;
-            case '\x04': if (vscroll != VSCROLL_FOLLOW)  vscroll += rows / 2;      break;
+            case key::HOME     : vscroll = hscroll = prev_follow = 0;    break;
+            case key::END      : vscroll = max_vscroll + 1, hscroll = 0; break;
 
-            case    'k': if (vscroll != 0)               vscroll --;               break;
-            case '\x15':
-                if (vscroll == VSCROLL_FOLLOW)
-                    vscroll -= rows / 2;
-                else {
-                    vscroll -= rows / 2;
-                    if (vscroll < 0)
-                        vscroll = 0;
-                }
-                break;
+            case kbd(      "g"): vscroll = prev_follow = 0;              break;
+            case kbd(      "G"): vscroll = max_vscroll + 1;              break;
+
+            case kbd(      "j"): vscroll ++;                             break;
+            case kbd(    "C-d"): vscroll += rows / 2;                    break;
+            case key::PAGE_DOWN: vscroll += rows;                        break;
+
+            case kbd(      "k"): vscroll --;                             break;
+            case kbd(    "C-u"): vscroll -= rows / 2;                    break;
+            case key::PAGE_UP  : vscroll -= rows;                        break;
         }
 
-        if (vscroll < VSCROLL_FOLLOW) {
-            vscroll = current.lines.size() - rows;
-            vscroll = vscroll < 0 ? 0 : vscroll;
-        }
+        // VSCROLL & HSCROLL are restricted in LOG mode, take care of that:
+        if (current.mode == pane::LOG) {
+            // ============= HSCROLL =============
+            clamp_nonnegative(hscroll);
 
-        if (vscroll > static_cast<int>(current.lines.size()) - rows)
-            vscroll = VSCROLL_FOLLOW;
+            // ============= VSCROLL =============
+            if (prev_follow) {
+                // We were in follow mode and broke out by scrolling up
+                if (vscroll < VSCROLL_FOLLOW)
+                    vscroll += max_vscroll - VSCROLL_FOLLOW + 1;
+                // Follow is the bottom state, can't scroll down from it 
+                else
+                if (vscroll > VSCROLL_FOLLOW)
+                    vscroll = VSCROLL_FOLLOW;
+            } else {
+                // Can't scroll past the beginning of the log, reset scroll to 0
+                clamp_nonnegative(vscroll);
+
+                // Scrolling past the last line activates follow mode
+                if (vscroll > max_vscroll)
+                    vscroll = VSCROLL_FOLLOW;
+            }
+        }
 
         redraw();
     }
@@ -276,7 +302,9 @@ void log_multiplexer::redraw() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         printf(RESET_SCREEN);
-        print_page(current.lines, rows - 1, cols, current.vscroll, current.hscroll);
+
+        bool follow = current.vscroll == VSCROLL_FOLLOW && current.mode == pane::LOG;
+        print_page(current.lines, rows - 1, cols, current.vscroll, current.hscroll, follow);
     }
 
     {
@@ -298,7 +326,11 @@ void log_multiplexer::redraw() {
 
         std::string marker = "[" + current.name + "]";
 
-        std::string modeline = make_modeline(cols, marker, location);
+        std::string left = marker + " ";
+        for (int i = 0; i < current.next.size(); ++ i)
+            left += "(" + std::to_string(i) + ")" + panes_.at(current.next[i]).name + " ";
+
+        std::string modeline = make_modeline(cols, left, location);
         draw_horizontal_line(modeline, cols);
     }
 
