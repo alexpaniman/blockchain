@@ -41,7 +41,7 @@ struct block_data {
 // =========
 
 
-constexpr uint32_t BLOCK_MAGIC = 'PFNS';
+constexpr uint32_t BLOCK_MAGIC = 'P'*256*256*256 + 'F'*256*256 + 'N'*256 + 'S';
 constexpr uint32_t PROOF_ORDER = 22;
 
 
@@ -181,12 +181,12 @@ struct arranged_block_iterable_proxy {
             return successor_index_ <=> other.successor_index_;
         }
 
-        constexpr bool operator==(const iterator &other) const { return ((*this) <=> other) == 0; };
-        constexpr bool operator!=(const iterator &other) const { return ((*this) <=> other) != 0; };
-        constexpr bool operator< (const iterator &other) const { return ((*this) <=> other) <  0; };
-        constexpr bool operator> (const iterator &other) const { return ((*this) <=> other) >  0; };
-        constexpr bool operator>=(const iterator &other) const { return ((*this) <=> other) >= 0; };
-        constexpr bool operator<=(const iterator &other) const { return ((*this) <=> other) <= 0; };
+        bool operator==(const iterator &other) const { return ((*this) <=> other) == 0; };
+        bool operator!=(const iterator &other) const { return ((*this) <=> other) != 0; };
+        bool operator< (const iterator &other) const { return ((*this) <=> other) <  0; };
+        bool operator> (const iterator &other) const { return ((*this) <=> other) >  0; };
+        bool operator>=(const iterator &other) const { return ((*this) <=> other) >= 0; };
+        bool operator<=(const iterator &other) const { return ((*this) <=> other) <= 0; };
 
     private:
         std::vector<arranged_block> &blocks_;
@@ -605,7 +605,7 @@ private:
 
 public:
     void run() {
-        constexpr std::chrono::milliseconds min_iteration_time{1000};
+        static constexpr std::chrono::milliseconds min_iteration_time{1000};
 
         while (true) {
             LOG("STATUS pow signing: {}, pending: {}, total: {}, current votes: {}",
