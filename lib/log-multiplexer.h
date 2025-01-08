@@ -27,17 +27,20 @@ struct pane_action {
 
 class pane_controller {
 public:
-    pane_data *pane = nullptr;
-
     virtual pane_action update(keybinding key) = 0;
     virtual ~pane_controller() = default;
+
+    void set_pane(pane_data *pane) { pane_ = pane; }
+
+protected:
+    pane_data *pane_ = nullptr;
 };
 
 struct pane {
     std::string name;
     int vscroll, hscroll;
 
-    std::vector<std::string> lines;
+    pane_data data;
     std::map<keybinding, int> next;
 
     enum its_mode { LOG, IMAGE } mode;

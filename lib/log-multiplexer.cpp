@@ -196,7 +196,14 @@ log_multiplexer::~log_multiplexer() {
 
 void log_multiplexer::create_pane(int pane_id, std::string name, pane::its_mode mode,
                                   std::unique_ptr<pane_controller> controller) {
-    panes_.emplace(pane_id, pane{std::move(name), mode, std::move(controller)});
+    // TODO: lock?
+    auto [i, added] = panes_.emplace(pane_id, pane{std::move(name), mode, std::move(controller)});
+    if (added) {
+        auto &[_, pane] = *i;
+        if (pane.controller != nullptr) {
+            pane.controller->set_pane(&pane.data);
+        }
+    }
 }
 
 void log_multiplexer::run() {
@@ -212,30 +219,55 @@ void log_multiplexer::run() {
         int prev_vscroll = vscroll;
         bool prev_follow = vscroll == VSCROLL_FOLLOW;
 
-        int num_lines = current.lines.size();
+        int num_lines = current.data.lines.size();
         int max_vscroll = num_lines - rows;
         clamp_nonnegative(max_vscroll);
 
-        switch (read_keybinding()) {
-            case key::LEFT     : current_ --;                            break;
-            case key::RIGHT    : current_ ++;                            break;
+        bool should_redraw = true;
 
-            case kbd(      "h"): hscroll --;                             break;
-            case kbd(      "l"): hscroll ++;                             break;
+        keybinding pressed = read_keybinding();
+        switch (pressed) {
+        case kbd(      "H"): current_ --;                                   break;
+        case kbd(      "L"): current_ ++;                                   break;
 
-            case key::HOME     : vscroll = hscroll = prev_follow = 0;    break;
-            case key::END      : vscroll = max_vscroll + 1, hscroll = 0; break;
+        case kbd(      "h"): hscroll --;                                    break;
+        case kbd(      "l"): hscroll ++;                                    break;
 
-            case kbd(      "g"): vscroll = prev_follow = 0;              break;
-            case kbd(      "G"): vscroll = max_vscroll + 1;              break;
+        case key::HOME     : vscroll = hscroll = prev_follow = 0;           break;
+        case key::END      : vscroll = max_vscroll + 1, hscroll = 0;        break;
 
-            case kbd(      "j"): vscroll ++;                             break;
-            case kbd(    "C-d"): vscroll += rows / 2;                    break;
-            case key::PAGE_DOWN: vscroll += rows;                        break;
+        case kbd(      "g"): vscroll = prev_follow = 0;                     break;
+        case kbd(      "G"): vscroll = max_vscroll + 1;                     break;
 
-            case kbd(      "k"): vscroll --;                             break;
-            case kbd(    "C-u"): vscroll -= rows / 2;                    break;
-            case key::PAGE_UP  : vscroll -= rows;                        break;
+        case kbd(      "j"): vscroll ++;                                    break;
+        case kbd(    "C-d"): vscroll += rows / 2;                           break;
+        case key::PAGE_DOWN: vscroll += rows;                               break;
+
+        case kbd(      "k"): vscroll --;                                    break;
+        case kbd(    "C-u"): vscroll -= rows / 2;                           break;
+        case key::PAGE_UP  : vscroll -= rows;                               break;
+
+        default:
+            auto i = current.next.find(pressed);
+            if (i != current.next.end()) {
+                auto [_, next_pane] = *i;
+                current_ = next_pane;
+                break;
+            }
+
+            if (current.controller) {
+                pane_action action = current.controller->update(pressed);
+                switch (action.kind) {
+                case pane_action::IGNORE:     should_redraw = false;        break;
+                case pane_action::SUBSTITUTE: current_ = action.substitute; break;
+                case pane_action::REDRAW:                                   break;
+                default: assert(false && "Unhandeled action kind");         break;
+                }
+                break;
+            }
+
+            should_redraw = false; // unhandeled key, ignore
+            break;
         }
 
         // VSCROLL & HSCROLL are restricted in LOG mode, take care of that:
@@ -272,8 +304,8 @@ void log_multiplexer::assign(int log_id, const std::string &message) {
 
         pane &current = panes_.at(log_id);
 
-        current.lines.clear();
-        split_line(current.lines, message);
+        current.data.lines.clear();
+        split_line(current.data.lines, message);
     }
 
     if (log_id == current_)
@@ -283,7 +315,7 @@ void log_multiplexer::assign(int log_id, const std::string &message) {
 void log_multiplexer::append(int log_id, const std::string &message) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        split_line(panes_.at(log_id).lines, message);
+        split_line(panes_.at(log_id).data.lines, message);
     }
 
     if (log_id == current_)
@@ -304,7 +336,7 @@ void log_multiplexer::redraw() {
         printf(RESET_SCREEN);
 
         bool follow = current.vscroll == VSCROLL_FOLLOW && current.mode == pane::LOG;
-        print_page(current.lines, rows - 1, cols, current.vscroll, current.hscroll, follow);
+        print_page(current.data.lines, rows - 1, cols, current.vscroll, current.hscroll, follow);
     }
 
     {
@@ -314,12 +346,12 @@ void log_multiplexer::redraw() {
         switch (current.vscroll) {
             case VSCROLL_FOLLOW: location += "BOT";                                  break;
             case              0: location += "TOP";                                  break;
-            default:             location += "+" + std::to_string(current.vscroll);  break;
+            default:             location += std::format("{:+}", current.vscroll);   break;
         }
 
         switch (current.hscroll) {
             case              0:                                                     break;
-            default:             location += " +" + std::to_string(current.hscroll); break;
+            default:             location += std::format(" {:+}", current.hscroll);  break;
         }
 
         location += " ";
